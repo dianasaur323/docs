@@ -147,15 +147,13 @@ You'll start with a 3-node CockroachDB cluster in the `us-east1-b` GCE zone, wit
 
 1. SSH to the first `n1-standard-4` instance.
 
-2. Download the [CockroachDB archive](https://binaries.cockroachdb.com/cockroach-{{ page.release_info.version }}.linux-amd64.tgz) for Linux, and extract the binary:
+2. Download the [CockroachDB archive](https://binaries.cockroachdb.com/cockroach-{{ page.release_info.version }}.linux-amd64.tgz) for Linux, extract the binary, and copy it into the `PATH`:
 
     {% include copy-clipboard.html %}
     ~~~ shell
     $ wget -qO- https://binaries.cockroachdb.com/cockroach-{{ page.release_info.version }}.linux-amd64.tgz \
     | tar  xvz
     ~~~
-
-3. Copy the binary into the `PATH`:
 
     {% include copy-clipboard.html %}
     ~~~ shell
@@ -164,7 +162,7 @@ You'll start with a 3-node CockroachDB cluster in the `us-east1-b` GCE zone, wit
 
     If you get a permissions error, prefix the command with `sudo`.
 
-4. Run the [`cockroach start`](start-a-node.html) command:
+3. Run the [`cockroach start`](start-a-node.html) command:
 
     {% include copy-clipboard.html %}
     ~~~ shell
@@ -178,9 +176,9 @@ You'll start with a 3-node CockroachDB cluster in the `us-east1-b` GCE zone, wit
     --background
     ~~~
 
-5. Repeat steps 1 - 4 for the other two `n1-standard-4` instances.
+4. Repeat steps 1 - 3 for the other two `n1-standard-4` instances.
 
-6. On any of the `n1-standard-4` instances, run the [`cockroach init`](initialize-a-cluster.html) command:
+5. On any of the `n1-standard-4` instances, run the [`cockroach init`](initialize-a-cluster.html) command:
 
     {% include copy-clipboard.html %}
     ~~~ shell
@@ -1327,12 +1325,211 @@ At just 8.42ms, this approach is faster due to the write and read executing in o
 
 ## Multi-region deployment
 
+Given that Movr is active on both US coasts, you'll now scale the cluster into two new regions, us-west1-a and us-west2-a, each with 3 nodes and an extra instance for simulating regional client traffic.
+
 ### Step 8. Create more instances
 
-### Step 9. Scale to multiple regions
+1. [Create 6 more instances](https://cloud.google.com/compute/docs/instances/create-start-instance), 3 in the **us-west1-a** zone, and 3 in the **us-west2-a** zone. While creating each instance:
+    - Use the `n1-standard-4` machine type (4 vCPUs, 15 GB memory).
+    - [Create and mount a local SSD](https://cloud.google.com/compute/docs/disks/local-ssd#create_local_ssd).
+    - To apply the Web UI firewall rule you created earlier, click **Management, disk, networking, SSH keys**, select the **Networking** tab, and then enter `cockroachdb` in the **Network tags** field.
 
-### Step 10. Test performance before partitioning
+2. Note the internal IP address of each `n1-standard-4` instance. You'll need these addresses when starting the CockroachDB nodes.
 
-### Step 11. Partition data by city
+3. Create an additional instance in the **us-west1-a** and **us-west2-a** zones. These can be smaller, such as `n1-standard-1`.
 
-### Step 12. Test performance after partitioning
+### Step 9. Scale the cluster
+
+1. SSH to one of the `n1-standard-4` instances in the **us-west1-a** zone.
+
+2. Download the [CockroachDB archive](https://binaries.cockroachdb.com/cockroach-{{ page.release_info.version }}.linux-amd64.tgz) for Linux, extract the binary, and copy it into the `PATH`:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ wget -qO- https://binaries.cockroachdb.com/cockroach-{{ page.release_info.version }}.linux-amd64.tgz \
+    | tar  xvz
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ cp -i cockroach-{{ page.release_info.version }}.linux-amd64/cockroach /usr/local/bin
+    ~~~
+
+    If you get a permissions error, prefix the command with `sudo`.
+
+3. Run the [`cockroach start`](start-a-node.html) command:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ cockroach start \
+    --insecure \
+    --advertise-host=<node internal address> \
+    --join=<same as earlier> \
+    --locality=cloud=gce,region=us-west1,zone=us-west1-a \
+    --cache=.25 \
+    --max-sql-memory=.25 \
+    --background
+    ~~~
+
+4. Repeat steps 1 - 3 for the other two `n1-standard-4` instances in the **us-west1-a** zone.
+
+5. SSH to one of the `n1-standard-4` instances in the **us-west2-a** zone.
+
+6. Download the [CockroachDB archive](https://binaries.cockroachdb.com/cockroach-{{ page.release_info.version }}.linux-amd64.tgz) for Linux, extract the binary, and copy it into the `PATH`:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ wget -qO- https://binaries.cockroachdb.com/cockroach-{{ page.release_info.version }}.linux-amd64.tgz \
+    | tar  xvz
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ cp -i cockroach-{{ page.release_info.version }}.linux-amd64/cockroach /usr/local/bin
+    ~~~
+
+    If you get a permissions error, prefix the command with `sudo`.
+
+7. Run the [`cockroach start`](start-a-node.html) command:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ cockroach start \
+    --insecure \
+    --advertise-host=<node1 internal address> \
+    --join=<same as earlier> \
+    --locality=cloud=gce,region=us-west2,zone=us-west2-a \
+    --cache=.25 \
+    --max-sql-memory=.25 \
+    --background
+    ~~~
+
+8. Repeat steps 5 - 7 for the other two `n1-standard-4` instances in the **us-west2-a** zone.
+
+### Step 10. Install the Python client
+
+In each of the new zones, SSH to the instance not running a CockroachDB node, and install the Python testing client as described in [step 5](#step-5-install-the-python-client) above.
+
+### Step 11. Check rebalancing
+
+Since you started each node with the `--locality` flag set to its GCE zone, over the next minutes, CockroachDB will rebalance data evenly across the zones.
+
+To check this, access the Web UI on any node at `<node address>:8080` and look at the **Node List**. You'll see that the range count is more or less even across all nodes:
+
+<img src="{{ 'images/v2.0/perf_tuning_multi_region_rebalancing.png' | relative_url }}" alt="Perf tuning rebalancing" style="border:1px solid #eee;max-width:100%" />
+
+For reference, here's how the nodes map to zones:
+
+Node IDs | Zone
+---------|-----
+1-3 | us-east1-b (South Carolina)
+4-6 | us-west1-a (Oregon)
+7-9 | us-west2-a (Los Angeles)
+
+To verify even balancing at range level, SSH to one of the instances not running CockroachDB and run the `SHOW EXPERIMENTAL_RANGES` statement:
+
+{% include copy-clipboard.html %}
+~~~ shell
+$ cockroach sql \
+--insecure \
+--host=<address of any node> \
+--database=movr \
+--execute="SHOW EXPERIMENTAL_RANGES FROM TABLE vehicles;"
+~~~
+
+~~~
++-----------+---------+----------+----------+--------------+
+| Start Key | End Key | Range ID | Replicas | Lease Holder |
++-----------+---------+----------+----------+--------------+
+| NULL      | NULL    |       51 | {2,5,7}  |            5 |
++-----------+---------+----------+----------+--------------+
+(1 row)
+~~~
+
+In this case, we can see that, for the single range containing `vehicles` data, one replica is in each zone, and the leaseholder is in the us-west1-a zone.
+
+### Step 12. Test performance
+
+In general, all of the tuning techniques featured in the single-region scenario above still apply in a multi-region deployment. However, the fact that data and leaseholders are spread across the US means greater latencies in many cases.
+
+#### Reads
+
+For example, imagine we are a Movr administrator in New York, and we want to get the IDs and descriptions of all New York-based bikes that are currently in use:
+
+1. SSH to the instance in us-east1-b with the Python client.
+
+2. Query for the data:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ python tuning.py \
+    --host=<address of a node in us-east1-b> \
+    --statement="SELECT id, ext FROM vehicles \
+    WHERE city = 'new york' \
+        AND type = 'bike' \
+        AND status = 'in_use'" \
+    --repeat=20 \
+    --times
+    ~~~
+
+    ~~~
+    Result:
+    ['id', 'ext']
+    ['0068ee24-2dfb-437d-9a5d-22bb742d519e', "{u'color': u'green', u'brand': u'Kona'}"]
+    ['01b80764-283b-4232-8961-a8d6a4121a08', "{u'color': u'green', u'brand': u'Pinarello'}"]
+    ['02a39628-a911-4450-b8c0-237865546f7f', "{u'color': u'black', u'brand': u'Schwinn'}"]
+    ['02eb2a12-f465-4575-85f8-a4b77be14c54', "{u'color': u'black', u'brand': u'Pinarello'}"]
+    ['02f2fcc3-fea6-4849-a3a0-dc60480fa6c2', "{u'color': u'red', u'brand': u'FujiCervelo'}"]
+    ['034d42cf-741f-428c-bbbb-e31820c68588', "{u'color': u'yellow', u'brand': u'Santa Cruz'}"]
+    ...
+
+    Times (seconds):
+    [0.21941494941711426, 0.07756304740905762, 0.076995849609375, 0.07703113555908203, 0.07726788520812988, 0.0768740177154541, 0.07699108123779297, 0.0771939754486084, 0.07709598541259766, 0.07707500457763672, 0.07711911201477051, 0.07710695266723633, 0.07673311233520508, 0.0768880844116211, 0.07702398300170898, 0.07713508605957031, 0.07724881172180176, 0.07672810554504395, 0.07661294937133789, 0.07683897018432617]
+
+    Average time (seconds):
+    0.0841469049454
+    ~~~
+
+As we saw earlier, the leaseholder for the `vehicles` table is in us-west1-a (Oregon), so our query had to go from the gateway node in us-east1-b all the way to the west coast and then back again before returning data to the client.
+
+For contrast, imagine we are now a Movr administrator in Seattle, and we want to get the IDs and descriptions of all Seattle-based bikes that are currently in use:
+
+1. SSH to the instance in us-west1-a with the Python client.
+
+2. Query for the data:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ python tuning.py \
+    --host=<address of a node in us-west1-a> \
+    --statement="SELECT id, ext FROM vehicles \
+    WHERE city = 'seattle' \
+        AND type = 'bike' \
+        AND status = 'in_use'" \
+    --repeat=20 \
+    --times
+    ~~~
+
+    ~~~
+    Result:
+    ['id', 'ext']
+    ['00078349-94d4-43e6-92be-8b0d1ac7ee9f', "{u'color': u'blue', u'brand': u'Merida'}"]
+    ['003f84c4-fa14-47b2-92d4-35a3dddd2d75', "{u'color': u'red', u'brand': u'Kona'}"]
+    ['0107a133-7762-4392-b1d9-496eb30ee5f9', "{u'color': u'yellow', u'brand': u'Kona'}"]
+    ['0144498b-4c4f-4036-8465-93a6bea502a3', "{u'color': u'blue', u'brand': u'Pinarello'}"]
+    ['01476004-fb10-4201-9e56-aadeb427f98a', "{u'color': u'black', u'brand': u'Merida'}"]
+
+    Times (seconds):
+    [0.015386104583740234, 0.007433891296386719, 0.00727391242980957, 0.0071489810943603516, 0.007225990295410156, 0.007175922393798828, 0.007027149200439453, 0.00709986686706543, 0.006872892379760742, 0.006968975067138672, 0.00710296630859375, 0.0073850154876708984, 0.00710296630859375, 0.011546134948730469, 0.007370948791503906, 0.007235050201416016, 0.00710606575012207, 0.007116079330444336, 0.007057905197143555, 0.007016897201538086]
+
+    Average time (seconds):
+    0.00778268575668
+    ~~~
+
+Because the leaseholder for `vehicles` is in the same zone as the client request, this query took just 7.78ms compared to the similar query in New York that took 84.14ms.  
+
+#### Writes
+
+### Step 13. Partition data by city
+
+### Step 14. Test performance after partitioning
