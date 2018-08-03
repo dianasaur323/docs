@@ -1329,7 +1329,7 @@ Given that Movr is active on both US coasts, you'll now scale the cluster into t
 
 ### Step 8. Create more instances
 
-1. [Create 6 more instances](https://cloud.google.com/compute/docs/instances/create-start-instance), 3 in the **us-west1-a** zone, and 3 in the **us-west2-a** zone. While creating each instance:
+1. [Create 6 more instances](https://cloud.google.com/compute/docs/instances/create-start-instance), 3 in the **us-west1-a** zone (Oregon), and 3 in the **us-west2-a** zone (Los Angeles). While creating each instance:
     - Use the `n1-standard-4` machine type (4 vCPUs, 15 GB memory).
     - [Create and mount a local SSD](https://cloud.google.com/compute/docs/disks/local-ssd#create_local_ssd).
     - To apply the Web UI firewall rule you created earlier, click **Management, disk, networking, SSH keys**, select the **Networking** tab, and then enter `cockroachdb` in the **Network tags** field.
@@ -1530,6 +1530,220 @@ Because the leaseholder for `vehicles` is in the same zone as the client request
 
 #### Writes
 
+The geographic distribution of data impacts write performance as well. For example, imagine 100 people in New York and 100 people in Los Angeles want to create new Movr accounts:
+
+1. SSH to the instance in us-east1-b with the Python client.
+
+2. Create 100 NY-based users:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    python tuning.py \
+    --host=<address of a node in us-east1-b> \
+    --statement="INSERT INTO users VALUES (gen_random_uuid(), 'new york', 'New Yorker', '111 East Street', '1736352379937347')" \
+    --repeat=100 \
+    --times
+    ~~~
+
+    ~~~
+    Times (seconds):
+    [0.6714589595794678, 0.07639288902282715, 0.0752859115600586, 0.0764150619506836, 0.07594609260559082, 0.07563400268554688, 0.07622909545898438, 0.07652401924133301, 0.07493305206298828, 0.07553482055664062, 0.07646608352661133, 0.07673192024230957, 0.0751500129699707, 0.07670903205871582, 0.07698702812194824, 0.07653212547302246, 0.07573103904724121, 0.08075284957885742, 0.07599091529846191, 0.07509589195251465, 0.07484793663024902, 0.0749969482421875, 0.0765998363494873, 0.07585883140563965, 0.07512998580932617, 0.07515096664428711, 0.07483911514282227, 0.07616710662841797, 0.07634806632995605, 0.07551693916320801, 0.07638883590698242, 0.07649779319763184, 0.07510995864868164, 0.07621598243713379, 0.0741729736328125, 0.07663893699645996, 0.07673215866088867, 0.0752711296081543, 0.07562804222106934, 0.07534408569335938, 0.07645702362060547, 0.07613301277160645, 0.07684707641601562, 0.0766289234161377, 0.07591390609741211, 0.07527494430541992, 0.07494521141052246, 0.07664299011230469, 0.07572197914123535, 0.0762031078338623, 0.07476496696472168, 0.07534098625183105, 0.0752561092376709, 0.07623100280761719, 0.07565498352050781, 0.07640910148620605, 0.07605099678039551, 0.07643699645996094, 0.07492995262145996, 0.07500410079956055, 0.07579898834228516, 0.0765690803527832, 0.07478499412536621, 0.07501411437988281, 0.07515788078308105, 0.0750880241394043, 0.07849693298339844, 0.07435417175292969, 0.0756690502166748, 0.07696700096130371, 0.07620000839233398, 0.07477903366088867, 0.07564401626586914, 0.07404804229736328, 0.07712006568908691, 0.07569503784179688, 0.07677006721496582, 0.07529711723327637, 0.07581686973571777, 0.07653093338012695, 0.07652711868286133, 0.07580709457397461, 0.07696008682250977, 0.07594108581542969, 0.07653212547302246, 0.0757298469543457, 0.07556796073913574, 0.07446599006652832, 0.07658195495605469, 0.07529091835021973, 0.07618594169616699, 0.07528305053710938, 0.0767979621887207, 0.0765221118927002, 0.0769491195678711, 0.0756378173828125, 0.07606887817382812, 0.0765841007232666, 0.07562589645385742, 0.07528400421142578]
+
+    Average time (seconds):
+    0.0818694829941
+    ~~~
+
+3. SSH to the instance in us-west2-a with the Python client.
+
+4. Create 100 new Los Angeles-based users:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    python tuning.py \
+    --host=<address of a node in us-west2-a> \
+    --statement="INSERT INTO users VALUES (gen_random_uuid(), 'los angeles', 'Los Angel', '111 West Street', '9822222379937347')" \
+    --repeat=100 \
+    --times
+    ~~~
+
+    ~~~
+    Times (seconds):
+    [0.13872694969177246, 0.13959693908691406, 0.1385641098022461, 0.14054203033447266, 0.13927793502807617, 0.137984037399292, 0.13989615440368652, 0.1410520076751709, 0.1385939121246338, 0.13822698593139648, 0.13682913780212402, 0.13848614692687988, 0.13852405548095703, 0.1383068561553955, 0.1392219066619873, 0.13934993743896484, 0.13752293586730957, 0.13835620880126953, 0.13915801048278809, 0.13971900939941406, 0.13719415664672852, 0.13735699653625488, 0.13897013664245605, 0.1374959945678711, 0.13857007026672363, 0.13880705833435059, 0.13756299018859863, 0.13879108428955078, 0.1387009620666504, 0.13945603370666504, 0.13792085647583008, 0.1376798152923584, 0.13746213912963867, 0.13860297203063965, 0.13760709762573242, 0.13918399810791016, 0.1370530128479004, 0.1392960548400879, 0.1391298770904541, 0.13768696784973145, 0.13859891891479492, 0.13876819610595703, 0.13826394081115723, 0.13748788833618164, 0.13735389709472656, 0.13851189613342285, 0.13878679275512695, 0.1368710994720459, 0.1392989158630371, 0.1395268440246582, 0.13918685913085938, 0.13799190521240234, 0.13922405242919922, 0.13824915885925293, 0.13936591148376465, 0.13903498649597168, 0.13809680938720703, 0.13932204246520996, 0.13969683647155762, 0.13826203346252441, 0.13962006568908691, 0.13848495483398438, 0.13889312744140625, 0.13620209693908691, 0.13854503631591797, 0.14294815063476562, 0.13912487030029297, 0.13945293426513672, 0.13765382766723633, 0.13927888870239258, 0.13942599296569824, 0.13892102241516113, 0.1394820213317871, 0.13924407958984375, 0.13817596435546875, 0.13852405548095703, 0.13794589042663574, 0.13872694969177246, 0.13785409927368164, 0.13929510116577148, 0.14283108711242676, 0.14198517799377441, 0.1396040916442871, 0.1382589340209961, 0.139268159866333, 0.14015889167785645, 0.13858413696289062, 0.13799691200256348, 0.13921213150024414, 0.1382758617401123, 0.1389000415802002, 0.139509916305542, 0.13865399360656738, 0.14020109176635742, 0.13837909698486328, 0.13908600807189941, 0.13843202590942383, 0.13906002044677734, 0.14122295379638672, 0.1394650936126709]
+
+    Average time (seconds):
+    0.13881247282
+    ~~~
+
+On average, it took 81.86ms to create a user in New York and 138.81ms to create a user in Los Angeles. To better understand this discrepancy, let's look at the distribution of data for the `users` table:
+
+{% include copy-clipboard.html %}
+~~~ shell
+$ cockroach sql \
+--insecure \
+--host=<address of any node> \
+--database=movr \
+--execute="SHOW EXPERIMENTAL_RANGES FROM TABLE users;"
+~~~
+
+~~~
++-----------+---------+----------+----------+--------------+
+| Start Key | End Key | Range ID | Replicas | Lease Holder |
++-----------+---------+----------+----------+--------------+
+| NULL      | NULL    |       24 | {2,6,8}  |            2 |
++-----------+---------+----------+----------+--------------+
+(1 row)
+~~~
+
+For the single range containing `users` data, one replica is in each zone, with the leaseholder in the us-east1-b zone. This means that:
+
+- When creating a user in New York, the request doesn't have to leave the zone to reach the leaseholder. However, since a write requires consensus from its replica group, the write has to wait for confirmation from either the replica in us-west1-a (Oregon) or us-west2-a (Los Angeles) before committing and then returning confirmation to the client.
+- When creating a user in Los Angeles, there are more network hops and, thus, increased latency. The request first needs to travel across the continent to the leaseholder in us-east1-b. It then has to wait for confirmation from either the replica in us-west1-a (Oregon) or us-west2-a (Los Angeles) before committing and then returning confirmation to the client back in the west.
+
 ### Step 13. Partition data by city
+
+For this service, the most effective technique for improving read and write latency is to [geo-partition](partitioning.html) the data by city. In essence, this means changing the way data is mapped to ranges. Instead of an entire table and its indexes mapping to a specific range or set of ranges, all rows in the table and its indexes with a given city will map to a range or set of ranges. Once ranges are defined in this way, we can then use the [replication zone](configure-replication-zones.html) feature to pin partitions to specific locations, ensuring that read and write requests from users in a specific city don't have to leave that region.
+
+1. Partitioning is an enterprise feature, so start off by [registering for a 30-day trial license](https://www.cockroachlabs.com/pricing/start-trial/).
+
+2. Once you received the trial license, SSH to any node in your cluster and [apply the license](enterprise-licensing.html#set-the-trial-or-enterprise-license-key):
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ cockroach sql \
+    --insecure \
+    --host=<address of any node> \
+    --execute="SET CLUSTER SETTING cluster.organization = '<your org name>';"
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ cockroach sql \
+    --insecure \
+    --host=<address of any node> \
+    --execute="SET CLUSTER SETTING enterprise.license = '<your license>';"
+    ~~~
+
+3. Define partitions for the `users` table:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ cockroach sql \
+    --insecure \
+    --database=movr \
+    --host=<address of any node> \
+    --execute="ALTER TABLE users \
+    PARTITION BY LIST (city) ( \
+        PARTITION new_york VALUES IN ('new york'), \
+        PARTITION boston VALUES IN ('boston'), \
+        PARTITION washington_dc VALUES IN ('washington dc'), \
+        PARTITION seattle VALUES IN ('seattle'), \
+        PARTITION san_francisco VALUES IN ('san francisco'), \
+        PARTITION los_angeles VALUES IN ('los angeles') \
+    );"
+    ~~~
+
+4. Define partitions for the `vehicles` table and its secondary indexes:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ cockroach sql \
+    --insecure \
+    --database=movr \
+    --host=<address of any node> \
+    --execute="ALTER TABLE vehicles \
+    PARTITION BY LIST (city) ( \
+        PARTITION new_york VALUES IN ('new york'), \
+        PARTITION boston VALUES IN ('boston'), \
+        PARTITION washington_dc VALUES IN ('washington dc'), \
+        PARTITION seattle VALUES IN ('seattle'), \
+        PARTITION san_francisco VALUES IN ('san francisco'), \
+        PARTITION los_angeles VALUES IN ('los angeles') \
+    );"
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ cockroach sql \
+    --insecure \
+    --database=movr \
+    --host=<address of any node> \
+    --execute="ALTER INDEX vehicles_auto_index_fk_city_ref_users \
+    PARTITION BY LIST (city) ( \
+        PARTITION new_york_idx VALUES IN ('new york'), \
+        PARTITION boston_idx VALUES IN ('boston'), \
+        PARTITION washington_dc_idx VALUES IN ('washington dc'), \
+        PARTITION seattle_idx VALUES IN ('seattle'), \
+        PARTITION san_francisco_idx VALUES IN ('san francisco'), \
+        PARTITION los_angeles_idx VALUES IN ('los angeles') \
+    );"
+    ~~~
+
+5. Define partitions for the `rides` table and its secondary indexes:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ cockroach sql \
+    --insecure \
+    --database=movr \
+    --host=<address of any node> \
+    --execute="ALTER TABLE rides \
+    PARTITION BY LIST (city) ( \
+        PARTITION new_york VALUES IN ('new york'), \
+        PARTITION boston VALUES IN ('boston'), \
+        PARTITION washington_dc VALUES IN ('washington dc'), \
+        PARTITION seattle VALUES IN ('seattle'), \
+        PARTITION san_francisco VALUES IN ('san francisco'), \
+        PARTITION los_angeles VALUES IN ('los angeles') \
+    );"
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ cockroach sql \
+    --insecure \
+    --database=movr \
+    --host=<address of any node> \
+    --execute="ALTER INDEX rides_auto_index_fk_city_ref_users \
+    PARTITION BY LIST (city) ( \
+        PARTITION new_york_idx1 VALUES IN ('new york'), \
+        PARTITION boston_idx1 VALUES IN ('boston'), \
+        PARTITION washington_dc_idx1 VALUES IN ('washington dc'), \
+        PARTITION seattle_idx1 VALUES IN ('seattle'), \
+        PARTITION san_francisco_idx1 VALUES IN ('san francisco'), \
+        PARTITION los_angeles_idx1 VALUES IN ('los angeles') \
+    );"
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ cockroach sql \
+    --insecure \
+    --database=movr \
+    --host=<address of any node> \
+    --execute="ALTER INDEX rides_auto_index_fk_vehicle_city_ref_vehicles \
+    PARTITION BY LIST (vehicle_city) ( \
+        PARTITION new_york_idx2 VALUES IN ('new york'), \
+        PARTITION boston_idx2 VALUES IN ('boston'), \
+        PARTITION washington_dc_idx2 VALUES IN ('washington dc'), \
+        PARTITION seattle_idx2 VALUES IN ('seattle'), \
+        PARTITION san_francisco_idx2 VALUES IN ('san francisco'), \
+        PARTITION los_angeles_idx2 VALUES IN ('los angeles') \
+    );"
+    ~~~
+
+6. For the `rides` table, let's also drop an unused index rather than partition it:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ cockroach sql \
+    --insecure \
+    --database=movr \
+    --host=<address of any node> \
+    --execute="DROP INDEX rides_start_time_idx;"
+    ~~~
+
+    {{site.data.alerts.callout_info}}
+    The `rides` table contains 1 million rows, so dropping this index will take a few minutes.
+    {{site.data.alerts.end}}
 
 ### Step 14. Test performance after partitioning
