@@ -1605,7 +1605,7 @@ For this service, the most effective technique for improving read and write late
 
 1. Partitioning is an enterprise feature, so start off by [registering for a 30-day trial license](https://www.cockroachlabs.com/pricing/start-trial/).
 
-2. Once you received the trial license, SSH to any node in your cluster and [apply the license](enterprise-licensing.html#set-the-trial-or-enterprise-license-key):
+2. Once you've received the trial license, SSH to any node in your cluster and [apply the license](enterprise-licensing.html#set-the-trial-or-enterprise-license-key):
 
     {% include copy-clipboard.html %}
     ~~~ shell
@@ -1623,7 +1623,9 @@ For this service, the most effective technique for improving read and write late
     --execute="SET CLUSTER SETTING enterprise.license = '<your license>';"
     ~~~
 
-3. Define partitions for the `users` table:
+3. Define partitions for all tables and their secondary indexes.
+
+    Start with the `users` table:
 
     {% include copy-clipboard.html %}
     ~~~ shell
@@ -1642,7 +1644,7 @@ For this service, the most effective technique for improving read and write late
     );"
     ~~~
 
-4. Define partitions for the `vehicles` table and its secondary indexes:
+    Now define partitions for the `vehicles` table and its secondary indexes:
 
     {% include copy-clipboard.html %}
     ~~~ shell
@@ -1678,7 +1680,7 @@ For this service, the most effective technique for improving read and write late
     );"
     ~~~
 
-5. Define partitions for the `rides` table and its secondary indexes:
+    Next, define partitions for the `rides` table and its secondary indexes:
 
     {% include copy-clipboard.html %}
     ~~~ shell
@@ -1731,7 +1733,7 @@ For this service, the most effective technique for improving read and write late
     );"
     ~~~
 
-6. For the `rides` table, let's also drop an unused index rather than partition it:
+    Finally, drop an unused index on `rides` rather than partition it:
 
     {% include copy-clipboard.html %}
     ~~~ shell
@@ -1746,4 +1748,397 @@ For this service, the most effective technique for improving read and write late
     The `rides` table contains 1 million rows, so dropping this index will take a few minutes.
     {{site.data.alerts.end}}
 
-### Step 14. Test performance after partitioning
+7. Now [create replication zones](configure-replication-zones.html#create-a-replication-zone-for-a-table-partition-new-in-v2-0) to require city data to be stored on specific nodes based on node locality.
+
+    City | Locality
+    -----|---------
+    New York | `zone=us-east1-b`
+    Boston | `zone=us-east1-b`
+    Washington DC | `zone=us-east1-b`
+    Seattle | `zone=us-west1-a`
+    San Francisco | `zone=us-west2-a`
+    Los Angelese | `zone=us-west2-a`
+
+    {{site.data.alerts.callout_info}}
+    Since our nodes are located in 3 specific GCE zones, we're only going to use the `zone=` portion of node locality. If we were using multiple zones per regions, we would likely use the `region=` portion of the node locality instead.
+    {{site.data.alerts.end}}
+
+    Start with the `users` table partitions:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.users.new_york \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.users.boston \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.users.washington_dc \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west1-a]' | \
+    cockroach zone set movr.users.seattle \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west2-a]' | \
+    cockroach zone set movr.users.san_francisco \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west2-a]' | \
+    cockroach zone set movr.users.los_angeles \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    Move on to the `vehicles` table and secondary index partitions:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.vehicles.new_york \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.vehicles.new_york_idx \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.vehicles.boston \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.vehicles.boston_idx \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.vehicles.washington_dc \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.vehicles.washington_dc_idx \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west1-a]' | \
+    cockroach zone set movr.vehicles.seattle \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west1-a]' | \
+    cockroach zone set movr.vehicles.seattle_idx \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west2-a]' | \
+    cockroach zone set movr.vehicles.san_francisco \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west2-a]' | \
+    cockroach zone set movr.vehicles.san_francisco_idx \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west2-a]' | \
+    cockroach zone set movr.vehicles.los_angeles \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west2-a]' | \
+    cockroach zone set movr.vehicles.los_angeles_idx \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    Finish with the `rides` table and secondary index partitions:
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.rides.new_york \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.rides.new_york_idx1 \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.rides.new_york_idx2 \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.rides.boston \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.rides.boston_idx1 \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.rides.boston_idx2 \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.rides.washington_dc \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.rides.washington_dc_idx1 \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-east1-b]' | \
+    cockroach zone set movr.rides.washington_dc_idx2 \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west1-a]' | \
+    cockroach zone set movr.rides.seattle \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west1-a]' | \
+    cockroach zone set movr.rides.seattle_idx1 \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west1-a]' | \
+    cockroach zone set movr.rides.seattle_idx2 \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west2-a]' | \
+    cockroach zone set movr.rides.san_francisco \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west2-a]' | \
+    cockroach zone set movr.rides.san_francisco_idx1 \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west2-a]' | \
+    cockroach zone set movr.rides.san_francisco_idx2 \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west2-a]' | \
+    cockroach zone set movr.rides.los_angeles \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west2-a]' | \
+    cockroach zone set movr.rides.los_angeles_idx1 \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+    {% include copy-clipboard.html %}
+    ~~~ shell
+    $ echo 'constraints: [+zone=us-west2-a]' | \
+    cockroach zone set movr.rides.los_angeles_idx2 \
+    --insecure \
+    --host=<address of any node> \
+    -f -
+    ~~~
+
+### Step 14. Check rebalancing after partitioning
+
+Over the next minutes, CockroachDB will rebalance all partitions based on the constraints you defined.
+
+To check this at a high level, access the Web UI on any node at `<node address>:8080` and look at the **Node List**. You'll see that the range count is still close to even across all nodes but much higher than before partitioning:
+
+<img src="{{ 'images/v2.0/perf_tuning_multi_region_rebalancing_after_partitioning.png' | relative_url }}" alt="Perf tuning rebalancing" style="border:1px solid #eee;max-width:100%" />
+
+For reference, here's how the nodes map to zones:
+
+Node IDs | Zone
+---------|-----
+1-3 | us-east1-b (South Carolina)
+4-6 | us-west1-a (Oregon)
+7-9 | us-west2-a (Los Angeles)
+
+To check at a more granular level, SSH to one of the instances not running CockroachDB and run the `SHOW EXPERIMENTAL_RANGES` statement on the `vehicles` table:
+
+{% include copy-clipboard.html %}
+~~~ shell
+$ cockroach sql \
+--insecure \
+--host=<address of any node> \
+--database=movr \
+--execute="SHOW EXPERIMENTAL_RANGES FROM TABLE vehicles;"
+~~~
+
+~~~
++----------------------------+----------------------------+----------+----------+--------------+
+|         Start Key          |          End Key           | Range ID | Replicas | Lease Holder |
++----------------------------+----------------------------+----------+----------+--------------+
+| NULL                       | /"boston"                  |       51 | {1,6,9}  |            9 |
+| /"boston"                  | /"boston"/PrefixEnd        |      179 | {1,2,3}  |            2 |
+| /"boston"/PrefixEnd        | /"los angeles"             |      180 | {2,5,7}  |            5 |
+| /"los angeles"             | /"los angeles"/PrefixEnd   |      231 | {7,8,9}  |            7 |
+| /"los angeles"/PrefixEnd   | /"new york"                |      232 | {2,5,7}  |            5 |
+| /"new york"                | /"new york"/PrefixEnd      |      175 | {1,2,3}  |            1 |
+| /"new york"/PrefixEnd      | /"san francisco"           |      176 | {2,5,7}  |            5 |
+| /"san francisco"           | /"san francisco"/PrefixEnd |      219 | {7,8,9}  |            7 |
+| /"san francisco"/PrefixEnd | /"seattle"                 |      220 | {2,5,7}  |            5 |
+| /"seattle"                 | /"seattle"/PrefixEnd       |      217 | {4,5,6}  |            6 |
+| /"seattle"/PrefixEnd       | /"washington dc"           |      218 | {1,5,7}  |            5 |
+| /"washington dc"           | /"washington dc"/PrefixEnd |      213 | {1,2,3}  |            2 |
+| /"washington dc"/PrefixEnd | NULL                       |      214 | {2,5,7}  |            5 |
++----------------------------+----------------------------+----------+----------+--------------+
+(13 rows)
+~~~
+
+### Step 15. Test performance after partitioning
